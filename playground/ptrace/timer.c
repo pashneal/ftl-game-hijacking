@@ -8,6 +8,8 @@ int func(int* count) {
 }
 
 int main() {
+  printf("[+] Main can be found at 0x%lx\n", (long)main);
+  printf("[+] Func can be found at 0x%lx\n", (long)func);
   int count = 0;
   while (1) {
     func(&count);
