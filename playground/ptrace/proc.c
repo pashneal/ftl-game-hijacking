@@ -91,11 +91,11 @@ int overwrite(int pid, mem * base_offsets, long unsigned int qword, int target_l
   addr += target_location;
   long result = ptrace(PTRACE_POKEDATA, pid, addr, qword);
   if (result == -1) {
-    puts("[!] Couldn't overwrite word");
+    puts("[!] Couldn't overwrite qword");
     return 1;
   }
-  printf("[+] Overwrote word at %p with %lx\n", addr, qword);
-  puts("[+] Overwrote word successfully!");
+  printf("[+] Overwrote qword at %p with %lx\n", addr, qword);
+  puts("[+] Overwrote qword successfully!");
   return 0;
 }
 
