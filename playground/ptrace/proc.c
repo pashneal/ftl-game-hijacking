@@ -26,7 +26,7 @@ int search_mem(int pid, char * needle, mem * result) {
   fp = fopen(filename, "r");
   if (fp == NULL) {
     puts("[!] Couldn't open maps file");
-    return NULL;
+    return 1;
   }
 
   puts("[+] Opened maps file successfully!");
@@ -86,7 +86,40 @@ int save_registers(int pid)  {
   return 0;
 }
 
-int overwrite(int pid, mem * base_offsets, long unsigned int qword, int target_location) {
+// Take the final partial qword and combine it 
+// with the original qword, size is the number of bytes to take from the partial
+// qword (0 to 7)
+long unsigned int combine_qword( long unsigned int original_qword, long unsigned int partial_qword, int size) {
+  long unsigned int mask = 0xFFFFFFFFFFFFFFFF; 
+  mask <<= size * 8; // Shift mask to the left
+  long unsigned int relevant = original_qword &= mask; 
+  partial_qword = partial_qword &= ~mask; 
+  return partial_qword | relevant; 
+}
+
+int overwrite_buffer( int pid, mem * base_offsets, int target_location, void * data, int size) {
+  void * addr = base_offsets->executable_addr - base_offsets->offset;
+  addr += target_location;
+
+  while (size >= 8) {
+    ptrace(PTRACE_POKEDATA, pid, addr, *(long unsigned int *)data);
+    data += 8;
+    addr += 8;
+    size -= 8;
+  }
+
+  if (size > 0) {
+    long unsigned int partial_qword = *(long unsigned int *)data; 
+    long unsigned int original_qword = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+    long unsigned int final_qword = combine_qword(original_qword, partial_qword, size);
+    ptrace(PTRACE_POKEDATA, pid, addr, final_qword);
+  }
+
+  puts("[+] Overwrote buffer!");
+  return 0;
+}
+
+int overwrite_qword( int pid, mem * base_offsets, long unsigned int qword, int target_location) {
   void * addr = base_offsets->executable_addr - base_offsets->offset;
   addr += target_location;
   long result = ptrace(PTRACE_POKEDATA, pid, addr, qword);
@@ -130,13 +163,56 @@ int main(int argc, char ** argv) {
   sscanf(argv[1], "%d", &pid);
   mem * mem_offsets = malloc(sizeof(mem));
 
+  /* Goal 1: modify the count increase */
+  /*if (attach(pid) != 0) { return 1; }*/
+  /*if (save_registers(pid) != 0) { return 1; }*/
+  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*if (overwrite_qword(pid, mem_offsets, 0x89f8458b4805508d, 0x117f) != 0) { return 1; } */
+  /*if (peek(pid, mem_offsets, 0x117f) != 0) { return 1; }*/
+  /*if (detach(pid) != 0) { return 1; }*/
+
+  /* Goal 2a: modify main to call func2 instead of func */
+  /*if (attach(pid) != 0) { return 1; }*/
+  /*if (save_registers(pid) != 0) { return 1; }*/
+  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*if (overwrite_qword(pid, mem_offsets, 0xf2ebffffff4ee8, 0x125e) != 0) { return 1; } */
+  /*if (peek(pid, mem_offsets, 0x125e) != 0) { return 1; }*/
+  /*if (detach(pid) != 0) { return 1; }*/
+
+  /* Goal 2b: modify main to call func2 instead of func (with a buffer) */
+  /*char buffer[8] = {0xe8, 0x4e, 0xff, 0xff, 0xff, 0xeb, 0xf2, 0x00};*/
+  /*if (attach(pid) != 0) { return 1; }*/
+  /*if (save_registers(pid) != 0) { return 1; }*/
+  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*overwrite_buffer(pid, mem_offsets, 0x125e, (void *)buffer, 8); */
+  /*if (peek(pid, mem_offsets, 0x125e) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, 0x125e + 8) != 0) { return 1; }*/
+  /*if (detach(pid) != 0) { return 1; }*/
+
+  /* Goal 3: destructively replace func with func2 call*/
+  /*char buffer[5] = {0xe8, 0x48, 0x00, 0x00, 0x00}; // call 0x48 -> call func2*/
+  /*if (attach(pid) != 0) { return 1; }*/
+  /*if (save_registers(pid) != 0) { return 1; }*/
+  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, 0x1169) != 0) { return 1; }*/
+  /*overwrite_buffer(pid, mem_offsets, 0x1169, (void *)buffer,5); */
+  /*if (peek(pid, mem_offsets, 0x1169) != 0) { return 1; }*/
+  /*if (detach(pid) != 0) { return 1; }*/
+
+  /* Goal 4: modify func to call some existing shared library function (printf) */
+  char buffer[5] = {0xe8, 0x48, 0x00, 0x00, 0x00}; 
   if (attach(pid) != 0) { return 1; }
   if (save_registers(pid) != 0) { return 1; }
   if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }
-  if (overwrite(pid, mem_offsets, 0x89f8458b4805508d, 0x117f) != 0) { return 1; } 
-  if (peek(pid, mem_offsets, 0x117f) != 0) { return 1; }
+  if (peek(pid, mem_offsets, 0x1169) != 0) { return 1; }
+  overwrite_buffer(pid, mem_offsets, 0x1169, (void *)buffer,5); 
+  if (peek(pid, mem_offsets, 0x1169) != 0) { return 1; }
   if (detach(pid) != 0) { return 1; }
 
+  /* Goal 5: modify func to call a function in my shared library (hooking my own) once*/
+  /* Goal 6: move hooking code to asm*/
+  /* Goal 7: in asm, call hook and return to func (prologue)*/
+  /* Goal 8: in asm, run func code then call hook (epilogue)*/
 
   return 0;
 }

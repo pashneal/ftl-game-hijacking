@@ -7,6 +7,12 @@ int func(int* count) {
   sleep(1);
 }
 
+int func2(int* count) {
+  *count = *count + 1;
+  printf("[func2] Hello there for time #%d\n", *count);
+  sleep(1);
+}
+
 int main() {
   printf("[+] Main can be found at 0x%lx\n", (long)main);
   printf("[+] Func can be found at 0x%lx\n", (long)func);
