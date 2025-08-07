@@ -1,8 +1,7 @@
 #include <stdio.h> 
 #include <unistd.h>
 
-int func(int* count) {
-  *count = *count + 2;
-  printf("Hello there for time #%d\n", *count);
+int func3() {
+  printf("[func3] Hello there from the library\n");
   sleep(1);
 }

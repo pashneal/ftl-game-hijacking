@@ -132,6 +132,15 @@ int overwrite_qword( int pid, mem * base_offsets, long unsigned int qword, int t
   return 0;
 }
 
+// Make sure that this is little-endian
+int addr_to_buffer(mem * offsets, char * buffer, int index, int target_location) {
+  long unsigned int addr = (long unsigned int)(offsets->executable_addr - offsets->offset + target_location);
+
+  for (int i = 0; i < 8; i++) {
+    buffer[index + i] = (char)((addr >> (i * 8)) & 0xFF); // Extract each byte
+  }
+}
+
 int detach(int pid) {
   if (ptrace(PTRACE_CONT, pid, NULL, NULL) == -1) {
     puts("[!] Couldn't resume process, use kill -CONT <PID> to manually resume");
@@ -162,6 +171,7 @@ int main(int argc, char ** argv) {
   int pid;
   sscanf(argv[1], "%d", &pid);
   mem * mem_offsets = malloc(sizeof(mem));
+  mem * libexample_offsets = malloc(sizeof(mem));
 
   /* Goal 1: modify the count increase */
   /*if (attach(pid) != 0) { return 1; }*/
@@ -200,17 +210,44 @@ int main(int argc, char ** argv) {
   /*if (detach(pid) != 0) { return 1; }*/
 
   /* Goal 4a: destructively modify func to call some existing shared library function (puts) */
-  char buffer[20] = { //
-    0x48, 0x8D, 0x05, 0x00, 0x0F, 0x00, 0x00, // lea rax, puts_string_address*/
-    0x48, 0x89, 0xC7, // mov rdi, rax
-    0xE8, 0xD8, 0xFE, 0xFF, 0xFF// call puts
+  /*char buffer[20] = {  */
+    /*0x48, 0x8D, 0x05, 0x00, 0x0F, 0x00, 0x00, // lea rax, puts_string_address */
+    /*0x48, 0x89, 0xC7, // mov rdi, rax*/
+    /*0xE8, 0xD8, 0xFE, 0xFF, 0xFF// call puts*/
+  /*}; */
+
+  /*int target_location = 0x1189; // The location of the function call in the code*/
+
+  /*if (attach(pid) != 0) { return 1; }*/
+  /*if (save_registers(pid) != 0) { return 1; }*/
+  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
+  /*overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 15); */
+  /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
+  /*if (detach(pid) != 0) { return 1; }*/
+
+  /* Goal 4b: figure out what the lea address rule generally is */ 
+  // it's just the offset from the next instruction 
+
+  /* Goal 5: modify func to call a function in my shared library (hooking my own) once*/
+  char buffer[20] = { 
+    // mov rax, <fake address so we can overwrite it later>
+    0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 
+    0xFF, 0xE0 // jmp, rax
   }; 
+  // 0x725926a70000
 
   int target_location = 0x1189; // The location of the function call in the code
 
   if (attach(pid) != 0) { return 1; }
   if (save_registers(pid) != 0) { return 1; }
   if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }
+  if (search_mem(pid, "libexample", libexample_offsets) != 0) { return 1; }
+  addr_to_buffer(libexample_offsets, buffer, 2, 0x1139); 
   if (peek(pid, mem_offsets, target_location) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
@@ -219,9 +256,7 @@ int main(int argc, char ** argv) {
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
   if (detach(pid) != 0) { return 1; }
-  /* Goal 4b: figure out what the lea address rule generally is */ 
 
-  /* Goal 5: modify func to call a function in my shared library (hooking my own) once*/
   /* Goal 6: move hooking code to asm*/
   /* Goal 7: in asm, call hook and return to func (prologue)*/
   /* Goal 8: in asm, run func code then call hook (epilogue)*/
