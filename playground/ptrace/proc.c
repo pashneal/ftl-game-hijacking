@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+const int SELF_PID = -1; // Use -1 to refer to the current process
 // read man docs or ptrace(2) for more info on 
 // what this struct looks like under the hood
 static struct user_regs_struct oldregs; 
@@ -22,7 +23,12 @@ int search_mem(int pid, char * needle, mem * result) {
   FILE * fp;
   char filename[64];
 
-  sprintf(filename, "/proc/%d/maps", pid);
+  if (pid == SELF_PID) {
+    sprintf(filename, "/proc/self/maps");
+  } else {
+    sprintf(filename, "/proc/%d/maps", pid);
+  }
+
   fp = fopen(filename, "r");
   if (fp == NULL) {
     puts("[!] Couldn't open maps file");
@@ -132,14 +138,19 @@ int overwrite_qword( int pid, mem * base_offsets, long unsigned int qword, int t
   return 0;
 }
 
-// Make sure that this is little-endian
-int addr_to_buffer(mem * offsets, char * buffer, int index, int target_location) {
-  long unsigned int addr = (long unsigned int)(offsets->executable_addr - offsets->offset + target_location);
-
+int override_index(void * addr, int index, char * buffer) {
+  long unsigned int a = (long unsigned int)addr;
   for (int i = 0; i < 8; i++) {
-    buffer[index + i] = (char)((addr >> (i * 8)) & 0xFF); // Extract each byte
+    buffer[index + i] = (char)((a >> (i * 8)) & 0xFF); // Extract each byte
   }
 }
+
+// Make sure that this is little-endian
+int addr_to_buffer(mem * offsets, char * buffer, int index, int target_location) {
+  void * addr = (void *)(offsets->executable_addr - offsets->offset + target_location);
+  override_index(addr, index, buffer);
+}
+
 
 int detach(int pid) {
   if (ptrace(PTRACE_CONT, pid, NULL, NULL) == -1) {
@@ -161,6 +172,31 @@ int peek(int pid, mem * base_offsets, int target) {
   }
   printf("[+] Peeked data at %p: %lx\n", addr, result);
   return 0;
+}
+
+void * find_symbol(char * symbol)  {
+  void * handle = dlopen("./libexample.so", RTLD_NOW);
+  if (!handle) {
+    fprintf(stderr, "[!] Error opening library: %s\n", dlerror());
+    return NULL;
+  }
+  printf("[+] Opened library successfully: %p\n", handle);
+  void * addr = dlsym(handle, symbol);
+  if (!addr) {
+    fprintf(stderr, "[!] Error finding symbol %s: %s\n", symbol, dlerror());
+    dlclose(handle);
+    return NULL;
+  }
+
+  printf("[+] Found symbol %s at address %p\n", symbol, addr);
+  dlclose(handle);
+  return addr;
+}
+
+int calc_offset(mem * library_offsets, void * reference_addr) {
+  long offset_from_exec = (int)(reference_addr - library_offsets->executable_addr);
+  printf("[+] Calculated offset from executable: %lx\n", offset_from_exec);
+  return offset_from_exec;
 }
 
 int main(int argc, char ** argv) {
@@ -234,32 +270,69 @@ int main(int argc, char ** argv) {
   // it's just the offset from the next instruction 
 
   /* Goal 5: modify func to call a function in my shared library (hooking my own) once*/
+  // Must do LD_PRELOAD=./libexample.so for this to work
+
+  /*char buffer[20] = { */
+    /*// mov rax, <fake address so we can overwrite it later>*/
+    /*0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, */
+    /*0xFF, 0xE0 // jmp, rax*/
+  /*}; */
+
+  /*int target_location = 0x1189; // The location of the function call in the code*/
+  /*int library_func_location = 0x1139;*/
+
+  /*if (attach(pid) != 0) { return 1; }*/
+  /*if (save_registers(pid) != 0) { return 1; }*/
+  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*if (search_mem(pid, "libexample", libexample_offsets) != 0) { return 1; }*/
+  /*addr_to_buffer(libexample_offsets, buffer, 2, library_func_location); */
+
+  /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
+  /*overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 12); */
+  /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
+  /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
+  /*if (detach(pid) != 0) { return 1; }*/
+
+  /* Goal 6: automatically get the library function address from dlopen/dlsym */
   char buffer[20] = { 
     // mov rax, <fake address so we can overwrite it later>
     0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 
     0xFF, 0xE0 // jmp, rax
   }; 
-  // 0x725926a70000
 
-  int target_location = 0x1189; // The location of the function call in the code
+  int target_location = 0x1189; // The location of "func()"
+
+  // first figure out offsets for the symbol in our own memory
+  // Must do LD_PRELOAD=./libexample.so for this to work
+  void * library_func_addr = find_symbol("func3");
+  if (search_mem(SELF_PID, "libexample", libexample_offsets) != 0) { return 1; }
+  int offset = calc_offset(libexample_offsets, library_func_addr);
+  if (!library_func_addr) { return 1; }
 
   if (attach(pid) != 0) { return 1; }
   if (save_registers(pid) != 0) { return 1; }
   if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }
   if (search_mem(pid, "libexample", libexample_offsets) != 0) { return 1; }
-  addr_to_buffer(libexample_offsets, buffer, 2, 0x1139); 
+
+  // apply the same offset to figure out the symbol location in the victim process
+  library_func_addr = libexample_offsets->executable_addr + offset;
+  override_index(library_func_addr, 2, buffer); 
+
   if (peek(pid, mem_offsets, target_location) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
-  overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 15); 
+  overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 12); 
   if (peek(pid, mem_offsets, target_location) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
   if (detach(pid) != 0) { return 1; }
 
-  /* Goal 6: move hooking code to asm*/
-  /* Goal 7: in asm, call hook and return to func (prologue)*/
-  /* Goal 8: in asm, run func code then call hook (epilogue)*/
+  /* Goal 7: move hooking code to library constructor*/
+  /* Goal 8: in shellcode, call hook and return to func (prologue)*/
+  /* Goal 9: in shellcode, run func code then call hook (epilogue)*/
 
   return 0;
 }
