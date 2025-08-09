@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+const long unsigned int BASE_OFFSET = 0x400000; // offset of FTL 
 const int SELF_PID = -1; // Use -1 to refer to the current process
 // read man docs or ptrace(2) for more info on 
 // what this struct looks like under the hood
@@ -199,6 +200,34 @@ int calc_offset(mem * library_offsets, void * reference_addr) {
   return offset_from_exec;
 }
 
+FILE * readelf(const char * symbol) {
+  char * command = "readelf -sX ./FTL.amd64 | grep %s\n";
+  char * formatted_command = malloc(strlen(command) + strlen(symbol) + 1);
+  sprintf(formatted_command, command, symbol);
+  puts("[+] Formatted command:");
+  FILE * fp = popen(formatted_command, "r");
+  free(formatted_command);
+  if (fp == NULL) {
+    puts("[!] Error reading command");
+    return NULL;
+  }
+  return fp;
+}
+
+unsigned long int get_offset(FILE * command_result) {
+  char line[256];
+  long unsigned int offset;
+  if (fgets(line, sizeof(line), command_result) != NULL) {
+    printf("[+] Read line:\n%s", line);
+    sscanf(line, "%*d: %lx%*s", &offset);
+    printf("[+] offset found: %p\n", (void *)offset);
+    offset -= BASE_OFFSET;
+    printf("[+] offset adjusted: %p\n", (void *)offset);
+    return offset;
+  } 
+  return -1;
+}
+
 int main(int argc, char ** argv) {
   if (argc < 2) {
     printf("Usage: %s <pid>\n", argv[0]);
@@ -209,130 +238,62 @@ int main(int argc, char ** argv) {
   mem * mem_offsets = malloc(sizeof(mem));
   mem * libexample_offsets = malloc(sizeof(mem));
 
-  /* Goal 1: modify the count increase */
-  /*if (attach(pid) != 0) { return 1; }*/
-  /*if (save_registers(pid) != 0) { return 1; }*/
-  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
-  /*if (overwrite_qword(pid, mem_offsets, 0x89f8458b4805508d, 0x117f) != 0) { return 1; } */
-  /*if (peek(pid, mem_offsets, 0x117f) != 0) { return 1; }*/
-  /*if (detach(pid) != 0) { return 1; }*/
+  /*Goal 1: modify FTL's ArmamentControl fuction*/
 
-  /* Goal 2a: modify main to call func2 instead of func */
-  /*if (attach(pid) != 0) { return 1; }*/
-  /*if (save_registers(pid) != 0) { return 1; }*/
-  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
-  /*if (overwrite_qword(pid, mem_offsets, 0xf2ebffffff4ee8, 0x125e) != 0) { return 1; } */
-  /*if (peek(pid, mem_offsets, 0x125e) != 0) { return 1; }*/
-  /*if (detach(pid) != 0) { return 1; }*/
-
-  /* Goal 2b: modify main to call func2 instead of func (with a buffer) */
-  /*char buffer[8] = {0xe8, 0x4e, 0xff, 0xff, 0xff, 0xeb, 0xf2, 0x00};*/
-  /*if (attach(pid) != 0) { return 1; }*/
-  /*if (save_registers(pid) != 0) { return 1; }*/
-  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
-  /*overwrite_buffer(pid, mem_offsets, 0x125e, (void *)buffer, 8); */
-  /*if (peek(pid, mem_offsets, 0x125e) != 0) { return 1; }*/
-  /*if (peek(pid, mem_offsets, 0x125e + 8) != 0) { return 1; }*/
-  /*if (detach(pid) != 0) { return 1; }*/
-
-  /* Goal 3: destructively replace func with func2 call*/
-  /*char buffer[5] = {0xe8, 0x48, 0x00, 0x00, 0x00}; // call 0x48 -> call func2*/
-  /*if (attach(pid) != 0) { return 1; }*/
-  /*if (save_registers(pid) != 0) { return 1; }*/
-  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
-  /*if (peek(pid, mem_offsets, 0x1169) != 0) { return 1; }*/
-  /*overwrite_buffer(pid, mem_offsets, 0x1169, (void *)buffer,5); */
-  /*if (peek(pid, mem_offsets, 0x1169) != 0) { return 1; }*/
-  /*if (detach(pid) != 0) { return 1; }*/
-
-  /* Goal 4a: destructively modify func to call some existing shared library function (puts) */
   /*char buffer[20] = {  */
-    /*0x48, 0x8D, 0x05, 0x00, 0x0F, 0x00, 0x00, // lea rax, puts_string_address */
-    /*0x48, 0x89, 0xC7, // mov rdi, rax*/
-    /*0xE8, 0xD8, 0xFE, 0xFF, 0xFF// call puts*/
+    /*0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,  // mov rax, 0x01*/
+    /*0xC3, // retn*/
   /*}; */
 
-  /*int target_location = 0x1189; // The location of the function call in the code*/
+  /*int target_location = 0x0DE6B0;*/
 
   /*if (attach(pid) != 0) { return 1; }*/
   /*if (save_registers(pid) != 0) { return 1; }*/
-  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
+  /*if (search_mem(pid, "FTL", mem_offsets) != 0) { return 1; }*/
   /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
   /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
   /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
-  /*overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 15); */
+  /*overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 8); */
   /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
   /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
   /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
   /*if (detach(pid) != 0) { return 1; }*/
 
-  /* Goal 4b: figure out what the lea address rule generally is */ 
-  // it's just the offset from the next instruction 
+  /*Goal 2: Use readelf plus base offset to grab symbol address and overwrite it*/
 
-  /* Goal 5: modify func to call a function in my shared library (hooking my own) once*/
-  // Must do LD_PRELOAD=./libexample.so for this to work
+  int target_location;
+  char * symbol = "_ZN13WeaponControl7KeyDownEi";
+  unsigned long int offset;
+  FILE * command_result;
 
-  /*char buffer[20] = { */
-    /*// mov rax, <fake address so we can overwrite it later>*/
-    /*0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, */
-    /*0xFF, 0xE0 // jmp, rax*/
-  /*}; */
-
-  /*int target_location = 0x1189; // The location of the function call in the code*/
-  /*int library_func_location = 0x1139;*/
-
-  /*if (attach(pid) != 0) { return 1; }*/
-  /*if (save_registers(pid) != 0) { return 1; }*/
-  /*if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }*/
-  /*if (search_mem(pid, "libexample", libexample_offsets) != 0) { return 1; }*/
-  /*addr_to_buffer(libexample_offsets, buffer, 2, library_func_location); */
-
-  /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
-  /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
-  /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
-  /*overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 12); */
-  /*if (peek(pid, mem_offsets, target_location) != 0) { return 1; }*/
-  /*if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }*/
-  /*if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }*/
-  /*if (detach(pid) != 0) { return 1; }*/
-
-  /* Goal 6: automatically get the library function address from dlopen/dlsym */
-  char buffer[20] = { 
-    // mov rax, <fake address so we can overwrite it later>
-    0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 
-    0xFF, 0xE0 // jmp, rax
+  char buffer[20] = {  
+    0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,  // mov rax, 0x01
+    0xC3, // retn
   }; 
 
-  int target_location = 0x1189; // The location of "func()"
-
-  // first figure out offsets for the target symbol in our own proccess
-  // Must do LD_PRELOAD=./libexample.so for this to work
-  void * library_func_addr = find_symbol("func3");
-  if (!library_func_addr) { return 1; }
-  if (search_mem(SELF_PID, "libexample", libexample_offsets) != 0) { return 1; }
-  int offset = calc_offset(libexample_offsets, library_func_addr);
+  command_result = readelf(symbol);
+  if (command_result == NULL) { return 1; }
+  offset = get_offset(command_result);
+  if (offset == -1) { return 1; }
+  target_location = offset;
 
   if (attach(pid) != 0) { return 1; }
-  if (save_registers(pid) != 0) { return 1; }
-  if (search_mem(pid, "timer", mem_offsets) != 0) { return 1; }
-  if (search_mem(pid, "libexample", libexample_offsets) != 0) { return 1; }
-
-  // apply the same offset to figure out the symbol location in the victim process
-  library_func_addr = libexample_offsets->executable_addr + offset;
-  overwrite_index(library_func_addr, 2, buffer); 
-
+  if (search_mem(pid, "FTL", mem_offsets) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
-  overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 12); 
+  overwrite_buffer(pid, mem_offsets, target_location, (void *)buffer, 8); 
   if (peek(pid, mem_offsets, target_location) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
   if (detach(pid) != 0) { return 1; }
 
-  /* [stretch] Goal 7: automatically find the address/offset of the target function*/
-  /* Goal 8: in shellcode, call hook and return to func (prologue)*/
-  /* Goal 9: in shellcode, run func code then call hook (epilogue)*/
+  /*Goal 3: do it all in a library constructor*/
+  /*Goal 4: replace call to with call to flt_log saying "denied" or something
+    maybe we can write raw c for that?*/
+
+  /*Stretch Goal: ida pro script to spit out epilogue/ prologue*/
+  /*Stretch Goal: elf.h to spit out target symbol address*/
 
   return 0;
 }
