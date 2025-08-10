@@ -287,17 +287,5 @@ int main(int argc, char ** argv) {
   if (peek(pid, mem_offsets, target_location + 8) != 0) { return 1; }
   if (peek(pid, mem_offsets, target_location + 16) != 0) { return 1; }
 
-  /*Goal 3: convert to library constructor call*/
-  /*Goal 4: replace call to target func with call to flt_log saying "denied" or something
-    maybe we can write raw c for that?*/
-  /*Goal 5: simple prologue trampoline, jump to a relay function that saves all registers, does whatever, and restores overwritten bytes*/
-  /*Goal 6: ida pro script to spit out start and end of interesting functions*/
-
-  /*Stretch Goal 2: elf.h to spit out target symbol address*/
-  /*Stretch Goal 3: do it all in a library constructor
-   ptracing is janky but we can decompile and hardcode mem locations instead.
-   a cleaner solution down the line would be simply overwriting mem instead of ptracing
-   but alas. We have ways of now easily referencing target functions*/
-
   return 0;
 }
