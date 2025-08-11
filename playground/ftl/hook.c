@@ -12,6 +12,11 @@
 #include "elf.h"
 #include <stdbool.h>
 
+
+const FTL_LOG_CALL_INDEX = 0;
+const NATIVE_FTL_LOG_INDEX = 1; 
+const WEAPON_CONTROL_INDEX = 2;
+
 const long unsigned int FTL_BASE_OFFSET = 0x400000; 
 const int SELF_PID = -1; // Use -1 to refer to the current process
 // read man docs or ptrace(2) for more info on 
@@ -23,6 +28,12 @@ typedef struct {
   void * end_executable_addr;
   long offset;
 } mem;
+
+typedef struct {
+  char name[64]; // Null terminated name of the symbol 
+  void * addr;   // Address of the symbol in memory
+} entry;
+static entry memo[10] = {};
 
 int search_mem(int pid, char * needle, mem * result) {
   FILE * fp;
@@ -266,9 +277,16 @@ bool ftl_log_call() {
   return 1;
 }
 
+bool ftl_log_call_2() { 
+  typedef bool (*ftl_log_t)(const char *msg, ...);
+  ftl_log_t ftl_log = (ftl_log_t)memo[NATIVE_FTL_LOG_INDEX].addr;
+  ftl_log("Denied: %s\n", memo[FTL_LOG_CALL_INDEX].name);
+  return 1;
+}
+
 __attribute__ ((constructor)) int hook() {
 
-  /*Goal 3: Stretch Goal 1: convert to library constructor call
+  /*==========Goal 3: Stretch Goal 1: convert to library constructor call========
    0) find target function address in memory (cannot fork: must be hardcoded or elf parsed)
    1) try to overwrite some memory location (done)
    2) try to memprotect to change permissions (done)
@@ -288,7 +306,7 @@ __attribute__ ((constructor)) int hook() {
   /*if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }*/
   /*overwrite_mem(mem_offsets, target_offset, (char *)buffer, 8);*/
 
-  /*Goal 4: Stretch Goal 2: elf.h to spit out target symbol address*/
+  /*============Goal 4: Stretch Goal 2: elf.h to spit out target symbol address========*/
   /*long unsigned int target_offset = 0;*/
   /*long unsigned int test_offset = 0;*/
   /*elf_find_symbol("./FTL.amd64", "_Z7ftl_logPKcz", &test_offset);*/
@@ -314,55 +332,91 @@ __attribute__ ((constructor)) int hook() {
   /*overwrite_mem(mem_offsets, target_offset, (char *)buffer, 8);*/
 
 
-  /*Goal 5a: replace call to target func with call to puts saying "denied" or something
-    maybe we can write raw c for that?*/
-  // TODO: can't use rax because rax must be set to 0 I think
+  /*============Goal 5a: replace call to target func with call===========
+    1) to puts saying "denied" or something
+    2) maybe we can write raw c for that?*/
+
+  /*char buffer[40] = { */
+    /*// mov rax, <fake address so we can overwrite it later>*/
+    /*0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, */
+    /*0xFF, 0xE0 // jmp rax*/
+  /*}; */
+  /*long unsigned int target_offset = 0;*/
+  /*long unsigned int log_offset = 0;*/
+  /*long unsigned int test_offset = 0;*/
+  /*elf_find_symbol("./FTL.amd64", "_Z7ftl_logPKcz", &log_offset);*/
+  /*elf_find_symbol("./FTL.amd64", "_ZN13WeaponControl7KeyDownEi", &target_offset);*/
+  /*elf_find_symbol("/home/neal/Github/dev/ftl-game-hijacking/playground/ftl/hook.so", "ftl_log_call", &test_offset);*/
+
+  /*mem * hook_offsets = malloc(sizeof(mem));*/
+  /*if (search_mem(SELF_PID, "hook.so", hook_offsets) != 0) { return 1; }*/
+  /*printf("[+] hook.so start: %p\n", hook_offsets->start_executable_addr);*/
+
+  /*printf("[+] Log offset: %p\n", (void *)log_offset);*/
+  /*printf("[+] Target offset: %p\n", (void *)target_offset);*/
+  /*printf("[+] Test offset: %p\n", (void *)test_offset);*/
+  /*printf("[+] ftl_log_call address: %p\n", ftl_log_call);*/
+  /*printf("[+] ftl_log_call address: %p\n", &ftl_log_call);*/
+
+  /*if (log_offset == 0) { */
+    /*puts("[!] Couldn't find ftl_log() offset");*/
+    /*return 1; */
+  /*}*/
+  /*if (target_offset == 0) { */
+    /*puts("[!] Couldn't find target offset");*/
+    /*return 1; */
+  /*}*/
+
+  /*mem * mem_offsets = malloc(sizeof(mem));*/
+  
+
+  /*if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }*/
+  /*overwrite_index(ftl_log_call, 2, buffer); // Overwrite placeholder in mov r11*/
+
+  /*[>overwrite_index((void *)log_offset, 12, buffer);  // Overwrite placeholder in mov rdx<]*/
+
+  /*target_offset -= FTL_BASE_OFFSET;*/
+  /*overwrite_mem(mem_offsets, target_offset, (char *)buffer, 12);*/
+
+  /*==========Goal 5b: replace call to target func with ftl_log call===========
+   1) saying "denied" or something, 
+   2) approach maybe using a jump hash table*/
+
   char buffer[40] = { 
     // mov rax, <fake address so we can overwrite it later>
     0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 
     0xFF, 0xE0 // jmp rax
   }; 
+
   long unsigned int target_offset = 0;
   long unsigned int log_offset = 0;
-  long unsigned int test_offset = 0;
   elf_find_symbol("./FTL.amd64", "_Z7ftl_logPKcz", &log_offset);
   elf_find_symbol("./FTL.amd64", "_ZN13WeaponControl7KeyDownEi", &target_offset);
-  elf_find_symbol("/home/neal/Github/dev/ftl-game-hijacking/playground/ftl/hook.so", "ftl_log_call", &test_offset);
 
-  mem * hook_offsets = malloc(sizeof(mem));
-  if (search_mem(SELF_PID, "hook.so", hook_offsets) != 0) { return 1; }
-  printf("[+] hook.so start: %p\n", hook_offsets->start_executable_addr);
+  memo[FTL_LOG_CALL_INDEX] = (entry) {
+    .name = "ftl_log_call_2",
+    .addr = (void *)ftl_log_call_2
+  };
 
-  printf("[+] Log offset: %p\n", (void *)log_offset);
-  printf("[+] Target offset: %p\n", (void *)target_offset);
-  printf("[+] Test offset: %p\n", (void *)test_offset);
-  printf("[+] ftl_log_call address: %p\n", ftl_log_call);
-  printf("[+] ftl_log_call address: %p\n", &ftl_log_call);
+  memo[NATIVE_FTL_LOG_INDEX] = (entry) {
+    .name = "_Z7ftl_logPKcz",
+    .addr = (void *)log_offset
+  };
 
-  if (log_offset == 0) { 
-    puts("[!] Couldn't find ftl_log() offset");
-    return 1; 
-  }
-  if (target_offset == 0) { 
-    puts("[!] Couldn't find target offset");
-    return 1; 
-  }
+  memo[WEAPON_CONTROL_INDEX] = (entry) {
+    .name = "_ZN13WeaponControl7KeyDownEi",
+    .addr = (void *)target_offset
+  };
 
   mem * mem_offsets = malloc(sizeof(mem));
-  
-
   if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }
-  overwrite_index(ftl_log_call, 2, buffer); // Overwrite placeholder in mov r11
 
-  /*overwrite_index((void *)log_offset, 12, buffer);  // Overwrite placeholder in mov rdx*/
-
+  overwrite_index(ftl_log_call_2, 2, buffer); 
   target_offset -= FTL_BASE_OFFSET;
-  overwrite_mem(mem_offsets, target_offset, (char *)buffer, 12);
-
-  /*Goal 5b: replace call to target func with ftl_log call saying "denied" or something*/
+  overwrite_mem(mem_offsets, target_offset, (char *)buffer, 22);
 
 
-  /*Goal 6: simple prologue trampoline, jump to a relay function that saves all registers, does whatever, and restores overwritten bytes*/
+  /*Goal 6: simple prologue trampoline, jump to a relay function that saves necessary registers, does whatever, and restores overwritten bytes*/
   /*Goal 7: ida pro script to spit out start and end of interesting functions*/
   /*Goal 8: Stretch Goal 3: code gen for hook? (could use rust, or something good at metaprogramming)*/
 
