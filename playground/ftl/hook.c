@@ -13,9 +13,9 @@
 #include <stdbool.h>
 
 
-const FTL_LOG_CALL_INDEX = 0;
-const NATIVE_FTL_LOG_INDEX = 1; 
-const WEAPON_CONTROL_INDEX = 2;
+const int FTL_LOG_CALL_INDEX = 0;
+const int NATIVE_FTL_LOG_INDEX = 1; 
+const int WEAPON_CONTROL_INDEX = 2;
 
 const long unsigned int FTL_BASE_OFFSET = 0x400000; 
 const int SELF_PID = -1; // Use -1 to refer to the current process
@@ -148,6 +148,16 @@ int overwrite_mem( mem * base_offsets, int target_location, void * data, int siz
   return 0;
 }
 
+int overwrite_addr(void * addr, void * data, int size) {
+  printf("[+] Overwriting memory at %p, size: %d\n", addr, size);
+  if(memcpy(addr, data, size) == NULL) {
+    puts("[!] Couldn't overwrite memory");
+    return 1;
+  }
+  puts("[+] Overwrote addr!");
+  return 0;
+}
+
 int overwrite_buffer( int pid, mem * base_offsets, int target_location, void * data, int size) {
   void * addr = base_offsets->start_executable_addr - base_offsets->offset;
   addr += target_location;
@@ -183,7 +193,14 @@ int overwrite_qword( int pid, mem * base_offsets, long unsigned int qword, int t
   return 0;
 }
 
-int overwrite_index(void * addr, int index, char * buffer) {
+int overwrite_jump_placeholder(void * addr, int index, char * buffer) {
+  long unsigned int a = (long unsigned int)addr;
+  for (int i = 0; i < 4; i++) {
+    buffer[index + i] = (char)((a >> (i * 8)) & 0xFF); // Extract each byte
+  }
+}
+
+int overwrite_placeholder(void * addr, int index, char * buffer) {
   long unsigned int a = (long unsigned int)addr;
   for (int i = 0; i < 8; i++) {
     buffer[index + i] = (char)((a >> (i * 8)) & 0xFF); // Extract each byte
@@ -193,7 +210,7 @@ int overwrite_index(void * addr, int index, char * buffer) {
 // Make sure that this is little-endian
 int addr_to_buffer(mem * offsets, char * buffer, int index, int target_location) {
   void * addr = (void *)(offsets->start_executable_addr - offsets->offset + target_location);
-  overwrite_index(addr, index, buffer);
+  overwrite_placeholder(addr, index, buffer);
 }
 
 
@@ -277,11 +294,31 @@ bool ftl_log_call() {
   return 1;
 }
 
-bool ftl_log_call_2() { 
+bool ftl_log_wrapper() { 
   typedef bool (*ftl_log_t)(const char *msg, ...);
   ftl_log_t ftl_log = (ftl_log_t)memo[NATIVE_FTL_LOG_INDEX].addr;
   ftl_log("Denied: %s\n", memo[FTL_LOG_CALL_INDEX].name);
   return 1;
+}
+
+
+void * allocate_near(mem * offsets, int size) {
+  // use map fixed
+  void * addr = mmap(
+      (void *)offsets->end_executable_addr, 
+      size, 
+      PROT_READ | PROT_WRITE | PROT_EXEC, 
+      MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, 
+      SELF_PID, 
+      0
+  );
+  if (addr == MAP_FAILED) {
+    puts("[!] mmap failed");
+    perror("[!] mmap failed");
+    return NULL;
+  }
+  printf("[+] mmap succeeded, allocated at %p\n", addr);
+  return addr;
 }
 
 __attribute__ ((constructor)) int hook() {
@@ -371,9 +408,9 @@ __attribute__ ((constructor)) int hook() {
   
 
   /*if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }*/
-  /*overwrite_index(ftl_log_call, 2, buffer); // Overwrite placeholder in mov r11*/
+  /*overwrite_placeholder(ftl_log_call, 2, buffer); // Overwrite placeholder in mov r11*/
 
-  /*[>overwrite_index((void *)log_offset, 12, buffer);  // Overwrite placeholder in mov rdx<]*/
+  /*[>overwrite_placeholder((void *)log_offset, 12, buffer);  // Overwrite placeholder in mov rdx<]*/
 
   /*target_offset -= FTL_BASE_OFFSET;*/
   /*overwrite_mem(mem_offsets, target_offset, (char *)buffer, 12);*/
@@ -382,7 +419,48 @@ __attribute__ ((constructor)) int hook() {
    1) saying "denied" or something, 
    2) approach maybe using a jump hash table*/
 
-  char buffer[40] = { 
+  /*char buffer[40] = { */
+    /*// mov rax, <fake address so we can overwrite it later>*/
+    /*0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, */
+    /*0xFF, 0xE0 // jmp rax*/
+  /*}; */
+
+  /*long unsigned int target_offset = 0;*/
+  /*long unsigned int log_offset = 0;*/
+  /*elf_find_symbol("./FTL.amd64", "_Z7ftl_logPKcz", &log_offset);*/
+  /*elf_find_symbol("./FTL.amd64", "_ZN13WeaponControl7KeyDownEi", &target_offset);*/
+
+  /*memo[FTL_LOG_CALL_INDEX] = (entry) {*/
+    /*.name = "ftl_log_wrapper",*/
+    /*.addr = (void *)ftl_log_wrapper*/
+  /*};*/
+
+  /*memo[NATIVE_FTL_LOG_INDEX] = (entry) {*/
+    /*.name = "_Z7ftl_logPKcz",*/
+    /*.addr = (void *)log_offset*/
+  /*};*/
+
+  /*memo[WEAPON_CONTROL_INDEX] = (entry) {*/
+    /*.name = "_ZN13WeaponControl7KeyDownEi",*/
+    /*.addr = (void *)target_offset*/
+  /*};*/
+
+  /*mem * mem_offsets = malloc(sizeof(mem));*/
+  /*if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }*/
+
+  /*overwrite_placeholder(ftl_log_wrapper, 2, buffer); */
+  /*target_offset -= FTL_BASE_OFFSET;*/
+  /*overwrite_mem(mem_offsets, target_offset, (char *)buffer, 22);*/
+
+  /*=============Goal 6: simple relay function======================
+   1) jump to a relay function 
+   2) does something extra, return*/
+
+  char relay[40] = { 
+    0xE9, 0x00, 0x00, 0x00, 0x00, // jmp <placeholder> 
+  }; 
+  ; 
+  char trampoline[40] = { 
     // mov rax, <fake address so we can overwrite it later>
     0x48, 0xB8, 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 
     0xFF, 0xE0 // jmp rax
@@ -394,8 +472,8 @@ __attribute__ ((constructor)) int hook() {
   elf_find_symbol("./FTL.amd64", "_ZN13WeaponControl7KeyDownEi", &target_offset);
 
   memo[FTL_LOG_CALL_INDEX] = (entry) {
-    .name = "ftl_log_call_2",
-    .addr = (void *)ftl_log_call_2
+    .name = "ftl_log_wrapper",
+    .addr = (void *)ftl_log_wrapper
   };
 
   memo[NATIVE_FTL_LOG_INDEX] = (entry) {
@@ -411,12 +489,27 @@ __attribute__ ((constructor)) int hook() {
   mem * mem_offsets = malloc(sizeof(mem));
   if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }
 
-  overwrite_index(ftl_log_call_2, 2, buffer); 
+  void * allocated = allocate_near(mem_offsets, 4096); // Allocate a page near the target memory
+                                                       // because the 5 byte jump has a limited range
+  overwrite_placeholder(ftl_log_wrapper, 2, trampoline); 
+  overwrite_addr(allocated, (void *)trampoline, 12); 
+
+  long unsigned int relay_addr =  (long unsigned int)allocated - (target_offset + 5);
+  overwrite_jump_placeholder((void *)relay_addr, 1, relay); 
+  printf("[+] Relay address: %p\n", (void *)relay_addr);
+  printf("[+] Relay address: %p\n", (void *)*((long unsigned int *)(relay + 1)));
+
   target_offset -= FTL_BASE_OFFSET;
-  overwrite_mem(mem_offsets, target_offset, (char *)buffer, 22);
+  overwrite_mem(mem_offsets, target_offset, relay, 5);
 
 
-  /*Goal 6: simple prologue trampoline, jump to a relay function that saves necessary registers, does whatever, and restores overwritten bytes*/
+
+
+  /*=============Goal 7: simple prologue trampoline======================
+   1) jump to a relay function that saves necessary registers
+   2) does whatever the original function said
+   3) does something extra */
+
   /*Goal 7: ida pro script to spit out start and end of interesting functions*/
   /*Goal 8: Stretch Goal 3: code gen for hook? (could use rust, or something good at metaprogramming)*/
 
