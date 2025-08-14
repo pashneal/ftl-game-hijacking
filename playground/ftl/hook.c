@@ -33,6 +33,7 @@ typedef struct {
   char name[64]; // Null terminated name of the symbol 
   void * addr;   // Address of the symbol in memory
 } entry;
+
 static entry memo[10] = {};
 
 int search_mem(int pid, char * needle, mem * result) {
@@ -501,8 +502,6 @@ __attribute__ ((constructor)) int hook() {
 
   target_offset -= FTL_BASE_OFFSET;
   overwrite_mem(mem_offsets, target_offset, relay, 5);
-
-
 
 
   /*=============Goal 7: simple prologue trampoline======================
