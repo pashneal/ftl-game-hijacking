@@ -44,7 +44,7 @@ impl Definitions {
     fn memo_entry(&self, name: &str, symbol: &Symbol) -> String {
         let index = self.memo_constant(&name);
         format!(
-            "\tmemo[{}] = (entry){{\"{}\", (void*)0x{:X}}};",
+            "  memo[{}] = (entry){{\n    \"{}\",\n    (void*)0x{:X},\n  }};",
             index, name, symbol.st_value
         )
     }
@@ -66,8 +66,12 @@ impl Definitions {
     }
 
     pub fn main(&self) -> String {
+        let memo_entries = self.memo_entries();
+
         let lines = vec![
             MAIN_OPEN,
+            ALLOCATED_NEAR_MEMORY,
+            &memo_entries,
             CUSTOM_OPEN,
             &self.custom_code,
             CUSTOM_CLOSE,
@@ -78,10 +82,6 @@ impl Definitions {
 
     fn memo_definition(&self, length: usize) -> String {
         format!("entry memo[{}];", length)
-    }
-
-    fn memo_constants(&self) -> Vec<String> {
-        vec![]
     }
 
     pub fn head(&self) -> String {
@@ -161,12 +161,33 @@ fn create_symbol_mapping(filename: &str) -> HashMap<String, Symbol> {
 
 fn main() {
     // Use the hash table to find a given symbol in it.
-    let name = "_ZN13WeaponControl7KeyDownEi";
     let map = create_symbol_mapping("./FTL.amd64");
 
-    let mut program = Program::new("    puts(\"hello world\");");
+    let mut program = Program::new("");
+
+
+    // check if we already generated code (saved as generated_code.c)
+    if std::path::Path::new("generated_code.c").exists() {
+        let generated_code = std::fs::read_to_string("generated_code.c").expect("Unable to read file");
+        println!("{}", generated_code);
+        // parse out custom code from the file 
+        // custom code is between CUSTOM_OPEN and CUSTOM_CLOSE
+        let start = generated_code.find(CUSTOM_OPEN).unwrap() + CUSTOM_OPEN.len();
+        let end = generated_code.find(CUSTOM_CLOSE).unwrap();
+        // make sure to trim out new lines
+        let custom_code = &generated_code[start+1..end-1];
+        program = Program::new(custom_code);
+    }
+
+
+    let name = "_ZN13WeaponControl7KeyDownEi";
     let symbol = map.get(name).unwrap();
     program.add_memo(name, symbol.clone());
+
+    let name = "_Z7ftl_logPKcz";
+    let symbol = map.get(name).unwrap();
+    program.add_memo(name, symbol.clone());
+
     let generated_code = program.generate();
     println!("{}", generated_code);
 
@@ -174,9 +195,12 @@ fn main() {
     std::fs::write("generated_code.c", generated_code).expect("Unable to write file");
 
 
-    //let (sym_idx, sym) = hash_table.find(name, &dynsyms, &strtab)
-    //.expect("hash table and symbols should parse").unwrap();
-    //println!("Found symbol: {} at index {}", strtab.get(sym_idx).unwrap(), sym_idx);
-    //let value = sym.st_value;
-    //println!("Symbol value: {:#x}", value);
+    // Goals:
+    // 1. generate a hook  that can call the original function using the memo
+    // 2. generate a hook that overwrites the original function 
+    // 3. generate a hook that saves the overwritten bytes and restores function call
+    //    after executing custom code (can use elf parsing maybe to 
+    //    determine overwritten bytes)
+    //
+    // 4. generate a socket and something that feeds into the socket
 }

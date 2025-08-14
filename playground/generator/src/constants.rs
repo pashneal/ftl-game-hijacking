@@ -1,8 +1,15 @@
-pub const CUSTOM_OPEN: &str = "// ==== CUSTOM SECTION, EDIT BELOW ====";
-pub const CUSTOM_CLOSE: &str = "// ==== END CUSTOM SECTION, EDIT ABOVE ====";
+pub const CUSTOM_OPEN: &str = "    // ==== CUSTOM SECTION, EDIT BELOW ====";
+pub const CUSTOM_CLOSE: &str = "    // ==== END CUSTOM SECTION, EDIT ABOVE ====";
 
 pub const MAIN_OPEN: &str = "__attribute__((constructor)) int hook() {";
 pub const MAIN_CLOSE: &str = "    return 0;\n}";
+
+pub const ALLOCATED_NEAR_MEMORY: &str = 
+r#"    mem * mem_offsets = malloc(sizeof(mem));
+    if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }
+ 
+    void * allocated = allocate_near(mem_offsets, 4096); // Allocate a page near the target memory"#;
+
 pub const UTILS: &str = 
 r#"#include <stddef.h>
 #include <stdio.h>
