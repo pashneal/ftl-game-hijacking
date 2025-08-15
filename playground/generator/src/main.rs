@@ -35,7 +35,7 @@ fn main() {
 
 
     // Goals:
-    // 1. generate a hook  that can call the original function using the memo
+    // 1. generate a hook that can call the original function using the memo
     // 2. generate a hook that overwrites the original function 
     // 3. generate a hook that saves the overwritten bytes and restores function call
     //    after executing custom code (can use elf parsing maybe to 
