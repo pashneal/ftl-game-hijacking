@@ -42,3 +42,7 @@ pub fn to_constant_case(s: &str) -> String {
     }
     return result;
 }
+
+pub fn memo_name(s : &str) -> String {
+    to_constant_case(&parse(s, 0))
+}

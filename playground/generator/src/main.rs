@@ -1,15 +1,16 @@
 mod constants;
 mod parser;
+mod wrapper;
 mod signatures;
 mod program;
+mod hook;
 mod elf_parse;
 
 use program::Program;
-
-
-
+use wrapper::FuncWrapperBuilder;
 
 fn main() {
+    use signatures::Type::*;
     // Use the hash table to find a given symbol in it.
     let map = elf_parse::create_symbol_mapping("./FTL.amd64");
 
@@ -17,6 +18,15 @@ fn main() {
     if std::path::Path::new("generated_code.c").exists() {
         program = Program::from_existing();
     }
+
+    let wrapper  = FuncWrapperBuilder::new()
+        .return_type(Bool)
+        .args(vec![ConstCharPointer, Variadic])
+        .name("ftl_log")
+        .custom_code("  ftl_log(\"Hello World from Rust!\");\n  return 1;")
+        .target_memo(&parser::memo_name("_Z7ftl_logPKcz"))
+        .build()
+        .expect("Failed to build wrapper");
 
 
     let name = "_ZN13WeaponControl7KeyDownEi";
@@ -26,6 +36,8 @@ fn main() {
     let name = "_Z7ftl_logPKcz";
     let symbol = map.get(name).unwrap();
     program.add_memo(name, symbol.clone());
+
+    program.add_wrapper(&wrapper.code());
 
     let generated_code = program.generate();
     println!("{}", generated_code);

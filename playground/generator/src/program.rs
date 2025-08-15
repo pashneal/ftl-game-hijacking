@@ -15,13 +15,20 @@ impl Utilities {
 pub struct Definitions {
     memo: Vec<(String, Symbol)>,
     custom_code: String,
+    head_code: String,
 }
 impl Definitions {
     pub fn new( custom_code : &str) -> Self {
         Definitions { 
             memo: Vec::new(),
             custom_code: custom_code.to_string(),
+            head_code: String::new(),
         }
+    }
+
+    pub fn add_hook_code(&mut self, code: &str) {
+        self.head_code.push_str(code);
+        self.head_code.push('\n');
     }
 
     pub fn add_memo(&mut self, name: &str, symbol: Symbol) {
@@ -90,6 +97,7 @@ impl Definitions {
         let lines : Vec<&str> = vec![
             &defs, 
             &memo_indices,
+            &self.head_code,
         ];
         lines.join("\n")
     }
@@ -112,6 +120,10 @@ impl Program {
         }
     }
 
+    pub fn add_wrapper(&mut self, code : &str){
+        self.definitions.add_hook_code(code);
+    }
+
     pub fn from_existing() -> Self {
         let generated_code = std::fs::read_to_string("generated_code.c").expect("Unable to read file");
         println!("{}", generated_code);
@@ -128,6 +140,8 @@ impl Program {
         self.definitions.add_memo(name, symbol);
     }
 
+    pub fn add_hook() {
+    }
     pub fn generate(&self) -> String {
         let mut result = String::new();
         result += &self.utilities.utils();

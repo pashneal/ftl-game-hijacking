@@ -1,26 +1,4 @@
-#[derive(Clone, Debug)]
-pub enum Type{
-    Bool, 
-    Int, 
-    CharPointer,
-    ConstCharPointer,
-    Variadic,
-    Void,
-}
-
-impl Into<&'static str> for Type {
-    fn into(self) -> &'static str {
-        match self {
-            Type::Int => "int",
-            Type::CharPointer => "char*",
-            Type::ConstCharPointer => "const char*",
-            Type::Variadic => "...",
-            Type::Void => "void",
-            Type::Bool => "bool",
-        }
-    
-    }
-}
+use crate::signatures::Type;
 
 pub fn func_typedef(args: Vec<Type>, return_type: Type, name: &str) -> String {
     let mut final_string = "typedef ".to_string();
