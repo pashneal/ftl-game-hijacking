@@ -239,20 +239,6 @@ bool ftl_log_wrapper() {
 }
 
 void command_gui_wrapper(int *this) {
-/*asm("push %rsi\n"*/
-			/*"push %rdi\n"*/
-			/*"push %rax\n"*/
-			/*"push %rbx\n"*/
-			/*"push %rcx\n"*/
-			/*"push %rdx\n"*/
-			/*"push %r8\n"*/
-			/*"push %r9\n"*/
-			/*"push %r10\n"*/
-			/*"push %r11\n"*/
-			/*"push %r12\n"*/
-			/*"push %rbp\n"*/
-			/*"push %rsp\n"*/
-			/*);*/
   puts("[+] Hooked CommandGui constructor!");
   printf("[+] this pointer: %p\n", this);
   command_gui_addr = this;
