@@ -11,7 +11,7 @@
 
 
 #define JUMP_BUFFER_SIZE 5
-#define RELAY_BUFFER_SIZE 14
+#define RELAY_BUFFER_SIZE 16
 
 const long unsigned int FTL_BASE_OFFSET = 0x400000; 
 const int SELF_PID = -1; // Use -1 to refer to the current process
@@ -171,13 +171,15 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
 
   char relay_buffer[RELAY_BUFFER_SIZE] = {
     0x50,                                                       // push rax
+    0x57,                                                       // push rdi
     0x48, 0xB8,                                                 // movabs rax, <hook_func>
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,             // (8 bytes for hook_func address)
     0xFF, 0xD0,                                                 // call rax
+    0x5F,                                                       // pop rdi
     0x58                                                        // pop rax
   };
 
-  overwrite_placeholder(hook.hook_func, 3, relay_buffer);
+  overwrite_placeholder(hook.hook_func, 4, relay_buffer);
   printf("[+] Prepared relay buffer to hook function at %p\n", hook.hook_func);
 
   void * target_loc = *trampoline_cursor - (memo[OLD_COMMAND_GUI_CONSTRUCTOR].addr + JUMP_BUFFER_SIZE);
@@ -237,11 +239,25 @@ bool ftl_log_wrapper() {
 }
 
 void command_gui_wrapper(int *this) {
+/*asm("push %rsi\n"*/
+			/*"push %rdi\n"*/
+			/*"push %rax\n"*/
+			/*"push %rbx\n"*/
+			/*"push %rcx\n"*/
+			/*"push %rdx\n"*/
+			/*"push %r8\n"*/
+			/*"push %r9\n"*/
+			/*"push %r10\n"*/
+			/*"push %r11\n"*/
+			/*"push %r12\n"*/
+			/*"push %rbp\n"*/
+			/*"push %rsp\n"*/
+			/*);*/
   puts("[+] Hooked CommandGui constructor!");
   printf("[+] this pointer: %p\n", this);
-  /*return;*/
   command_gui_addr = this;
   puts("[+] jumping back to original CommandGui constructor!");
+
 }
 
 int unprotect(mem * memory) {
