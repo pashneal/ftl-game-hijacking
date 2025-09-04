@@ -13,22 +13,37 @@ typedef struct {
     unsigned short port;
     int running;
     pthread_t thread;
+    void (*on_message)(char *data, int len); // callback pointer
 } sw_server_t;
 
 static void* sw_worker(void* arg) {
-    int client_fd = *(int*)arg;
-    free(arg);
+    puts("Worker thread started.");
+    struct {
+        int client_fd;
+        void (*cb)(char*, int, char*, int*);
+    } *ctx = arg;
 
-    char buffer[1024];
+    int client_fd = ctx->client_fd;
+    void (*cb)(char*, int, char*, int*) = ctx->cb;
+    free(ctx);
+
+    char inbuf[1024];
+    char outbuf[10000];
+
     while (1) {
-        ssize_t n = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+        ssize_t n = recv(client_fd, inbuf, sizeof(inbuf), 0);
         if (n <= 0) {
-            printf("Client disconnected.\n");
             close(client_fd);
             break;
         }
-        buffer[n] = '\0';
-        printf("Received: %s\n", buffer);
+
+        int out_len = 0;
+        if (cb) {
+            cb(inbuf, (int)n, outbuf, &out_len);
+            if (out_len > 0) {
+                send(client_fd, outbuf, out_len, 0);
+            }
+        }
     }
     return NULL;
 }
@@ -44,20 +59,23 @@ static void* sw_server_loop(void* arg) {
 
         int client_fd = accept(server->server_fd, (struct sockaddr*)&client_addr, &client_len);
         if (client_fd < 0) {
-            if (server->running) {
-                perror("accept failed");
-            }
+            if (!server->running) break;
+            perror("accept failed");
             continue;
         }
-        printf("Client connected.\n");
 
         pthread_t thread;
-        int* fd_ptr = malloc(sizeof(int));
-        *fd_ptr = client_fd;
-        if (pthread_create(&thread, NULL, sw_worker, fd_ptr) != 0) {
+        struct {
+            int client_fd;
+            void (*cb)(char *, int);
+        } *ctx = malloc(sizeof(*ctx));
+        ctx->client_fd = client_fd;
+        ctx->cb = server->on_message;
+
+        if (pthread_create(&thread, NULL, sw_worker, ctx) != 0) {
             perror("pthread_create failed");
             close(client_fd);
-            free(fd_ptr);
+            free(ctx);
         } else {
             pthread_detach(thread);
         }
@@ -66,9 +84,10 @@ static void* sw_server_loop(void* arg) {
     return NULL;
 }
 
-static int sw_start(sw_server_t* server, unsigned short port) {
+static int sw_start(sw_server_t* server, unsigned short port, void (*on_message)(char *data, int len, char *outbuf, int *out_len)) {
     server->port = port;
     server->running = 1;
+    server->on_message = on_message;
 
     server->server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server->server_fd < 0) {
@@ -96,22 +115,21 @@ static int sw_start(sw_server_t* server, unsigned short port) {
         return -1;
     }
 
-    // Run server loop in a new thread
     if (pthread_create(&server->thread, NULL, sw_server_loop, server) != 0) {
         perror("pthread_create failed");
         close(server->server_fd);
         return -1;
     }
 
-    pthread_detach(server->thread);  // auto-cleanup when server stops
+    pthread_detach(server->thread);
     return 0;
 }
 
 static void sw_stop(sw_server_t* server) {
+    if (!server->running) return;
     server->running = 0;
     shutdown(server->server_fd, SHUT_RDWR);
     close(server->server_fd);
 }
-
 
 #endif // SOCKET_WORKER_H

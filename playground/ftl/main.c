@@ -213,11 +213,22 @@ bool ftl_log_wrapper() {
   return 1;
 }
 
+void sw_callback(
+    char * input_buffer, 
+    int input_size, 
+    char * output_buffer, 
+    int * output_size) 
+{
+  printf("[+] calling back and echoing with input %s\n", input_buffer);
+  memcpy(output_buffer, input_buffer, input_size);
+  *output_size  = input_size;
+}
+
 void command_gui_wrapper(int *this) {
   puts("[+] Hooked CommandGui constructor!");
   printf("[+] this pointer: %p\n", this);
   command_gui_addr = this;
-  if (sw_start(&server, 8080) != 0) {
+  if (sw_start(&server, 8080, sw_callback) != 0) {
     puts("[!] Could not start new socket server");
   }
   puts("[+] jumping back to original CommandGui constructor!");
@@ -232,6 +243,7 @@ int unprotect(mem * memory) {
   puts("[+] Changed memory permissions successfully!");
   return 0;
 }
+
 
 __attribute__((constructor)) int hook() {
   
