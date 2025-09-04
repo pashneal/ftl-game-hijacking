@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include "socket.h"
 
 
 #define JUMP_BUFFER_SIZE 5
@@ -17,6 +18,7 @@ const long unsigned int FTL_BASE_OFFSET = 0x400000;
 const int SELF_PID = -1; // Use -1 to refer to the current process
 int * command_gui_addr = NULL;
 void * trampoline_cursor = NULL;
+static sw_server_t server;
 
 
 typedef struct {
@@ -39,8 +41,7 @@ typedef struct {
 entry memo[4];
 #define WEAPON_CONTROL_KEY_DOWN 0
 #define FTL_LOG 1
-#define OLD_COMMAND_GUI_CONSTRUCTOR 2
-#define NEW_COMMAND_GUI_CONSTRUCTOR 3
+#define COMMAND_GUI_CONSTRUCTOR 2
 
 int search_mem(int pid, char * needle, mem * result) {
   FILE * fp;
@@ -92,32 +93,6 @@ int search_mem(int pid, char * needle, mem * result) {
   fclose(fp);
   puts("[!] Couldn't find memory location");
   return 1;
-}
-
-int overwrite_mem( mem * base_offsets, int target_location, void * data, int size) {
-  long unsigned int * addr = base_offsets->start_executable_addr - base_offsets->offset;
-
-  // ugly pointer math, but necessary :(
-  addr = (long unsigned int *)((long unsigned int)addr + target_location); 
-
-  printf("[+] Overwriting memory at %p, size: %d\n", addr, size);
-
-  int mem_size = base_offsets->end_executable_addr - base_offsets->start_executable_addr;
-  void * start_addr = (void *)base_offsets->start_executable_addr;
-  if (mprotect(start_addr, mem_size, PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
-    puts("[!] Couldn't change memory permissions");
-    perror("[!] mprotect failed");
-    return 1;
-  }
-
-
-  if(memcpy(addr, data, size) == NULL) {
-    puts("[!] Couldn't overwrite memory");
-    return 1;
-  }
-
-  puts("[+] Overwrote mem!");
-  return 0;
 }
 
 int overwrite_addr(void * addr, void * data, int size) {
@@ -182,7 +157,7 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
   overwrite_placeholder(hook.hook_func, 4, relay_buffer);
   printf("[+] Prepared relay buffer to hook function at %p\n", hook.hook_func);
 
-  void * target_loc = *trampoline_cursor - (memo[OLD_COMMAND_GUI_CONSTRUCTOR].addr + JUMP_BUFFER_SIZE);
+  void * target_loc = *trampoline_cursor - (memo[COMMAND_GUI_CONSTRUCTOR].addr + JUMP_BUFFER_SIZE);
   overwrite_jump_placeholder(target_loc, 1, jump_buffer);
 
   printf("[+] Overwriting target function at %p\n", memo[hook.target_memo_index].addr);
@@ -242,8 +217,10 @@ void command_gui_wrapper(int *this) {
   puts("[+] Hooked CommandGui constructor!");
   printf("[+] this pointer: %p\n", this);
   command_gui_addr = this;
+  if (sw_start(&server, 8080) != 0) {
+    puts("[!] Could not start new socket server");
+  }
   puts("[+] jumping back to original CommandGui constructor!");
-
 }
 
 int unprotect(mem * memory) {
@@ -282,18 +259,14 @@ __attribute__((constructor)) int hook() {
     "_Z7ftl_logPKcz",
     (void*)0x5A2380,
   };
-  memo[OLD_COMMAND_GUI_CONSTRUCTOR] = (entry){
+  memo[COMMAND_GUI_CONSTRUCTOR] = (entry){
     "_ZN10CommandGuiC2Ev",
     (void*)0x500150,
-  };
-  memo[NEW_COMMAND_GUI_CONSTRUCTOR] = (entry){
-    "",
-    (void*)0x0,// placeholder to be replaced by install_hook
   };
 
   // Install hooks
   hook_args command_gui_hook = {
-    OLD_COMMAND_GUI_CONSTRUCTOR,
+    COMMAND_GUI_CONSTRUCTOR,
     command_gui_wrapper,
     0x06, 
   };
