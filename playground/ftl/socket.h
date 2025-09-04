@@ -13,7 +13,7 @@ typedef struct {
     unsigned short port;
     int running;
     pthread_t thread;
-    void (*on_message)(char *data, int len); // callback pointer
+    void (*on_message)(char *data, int len, char *out, int* outlen); // callback pointer
 } sw_server_t;
 
 static void* sw_worker(void* arg) {
@@ -67,7 +67,7 @@ static void* sw_server_loop(void* arg) {
         pthread_t thread;
         struct {
             int client_fd;
-            void (*cb)(char *, int);
+            void (*cb)(char *, int, char *, int *);
         } *ctx = malloc(sizeof(*ctx));
         ctx->client_fd = client_fd;
         ctx->cb = server->on_message;

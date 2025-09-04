@@ -38,10 +38,11 @@ typedef struct {
   int prologue_size;    // Number of bytes to copy as prologue
 } hook_args;
 
-entry memo[4];
+entry memo[100];
 #define WEAPON_CONTROL_KEY_DOWN 0
 #define FTL_LOG 1
 #define COMMAND_GUI_CONSTRUCTOR 2
+#define COMMAND_GUI_KEY_DOWN 3
 
 int search_mem(int pid, char * needle, mem * result) {
   FILE * fp;
@@ -213,6 +214,29 @@ bool ftl_log_wrapper() {
   return 1;
 }
 
+typedef struct {
+  bool lower_case_key_press;
+  bool upper_case_key_press;
+  bool enter_key_press;
+  char key;
+} command_t;
+
+void parse_command(char * buffer, int buffer_size, command_t * command) {
+  command->lower_case_key_press = false;
+  command->upper_case_key_press = false;
+  command->enter_key_press = false;
+
+  if (buffer_size < 2) { return; }
+  if (buffer[0] == '.') {
+    command->lower_case_key_press = true;
+    command->key = buffer[1];
+  }
+  if (buffer[0] == '>'){
+    command->upper_case_key_press = true;
+    command->key = buffer[1];
+  }
+}
+
 void sw_callback(
     char * input_buffer, 
     int input_size, 
@@ -221,6 +245,17 @@ void sw_callback(
 {
   printf("[+] calling back and echoing with input %s\n", input_buffer);
   memcpy(output_buffer, input_buffer, input_size);
+  typedef bool (*command_key_down_t)(int *, char, bool);
+  command_key_down_t command_key_down = (command_key_down_t)memo[COMMAND_GUI_KEY_DOWN].addr;
+
+  command_t command;
+  parse_command(input_buffer, input_size, &command);
+
+  if (command.lower_case_key_press) {
+    command_key_down(command_gui_addr, command.key, false); 
+  } else if (command.upper_case_key_press) {
+    command_key_down(command_gui_addr, command.key, true);
+  }
   *output_size  = input_size;
 }
 
@@ -274,6 +309,10 @@ __attribute__((constructor)) int hook() {
   memo[COMMAND_GUI_CONSTRUCTOR] = (entry){
     "_ZN10CommandGuiC2Ev",
     (void*)0x500150,
+  };
+  memo[COMMAND_GUI_KEY_DOWN] = (entry){
+    "_ZN10CommandGui7KeyDownEib",
+    (void*)0x4FD110,
   };
 
   // Install hooks
