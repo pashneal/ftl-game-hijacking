@@ -43,6 +43,7 @@ entry memo[100];
 #define FTL_LOG 1
 #define COMMAND_GUI_CONSTRUCTOR 2
 #define COMMAND_GUI_KEY_DOWN 3
+#define CREW_CONTROL_CONSTRUCTOR 4
 
 int search_mem(int pid, char * needle, mem * result) {
   FILE * fp;
@@ -158,13 +159,12 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
   overwrite_placeholder(hook.hook_func, 4, relay_buffer);
   printf("[+] Prepared relay buffer to hook function at %p\n", hook.hook_func);
 
-  void * target_loc = *trampoline_cursor - (memo[COMMAND_GUI_CONSTRUCTOR].addr + JUMP_BUFFER_SIZE);
+  void * target_loc = *trampoline_cursor - (memo[hook.target_memo_index].addr + JUMP_BUFFER_SIZE);
   overwrite_jump_placeholder(target_loc, 1, jump_buffer);
 
   printf("[+] Overwriting target function at %p\n", memo[hook.target_memo_index].addr);
   printf("[+] Prologue size: %d\n", hook.prologue_size);
   printf("[+] Trampoline cursor at %p\n", *trampoline_cursor);
-
 
   if (!memcpy(*trampoline_cursor, memo[hook.target_memo_index].addr, hook.prologue_size)) {
     puts("[!] Couldn't copy prologue size to trampoline");
@@ -269,6 +269,10 @@ void command_gui_wrapper(int *this) {
   puts("[+] jumping back to original CommandGui constructor!");
 }
 
+void crew_control_constructor_wrapper(int *this) {
+  puts("[+] Hooked CrewControl constructor!");
+}
+
 int unprotect(mem * memory) {
   if (mprotect( memory->start_executable_addr, 0x42a000, PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
     puts("[!] Couldn't change memory permissions");
@@ -314,6 +318,10 @@ __attribute__((constructor)) int hook() {
     "_ZN10CommandGui7KeyDownEib",
     (void*)0x4FD110,
   };
+  memo[CREW_CONTROL_CONSTRUCTOR] = (entry){
+    "_ZN11CrewControlC2Ev",
+    (void*)0x50BCA0,
+  };
 
   // Install hooks
   hook_args command_gui_hook = {
@@ -322,8 +330,19 @@ __attribute__((constructor)) int hook() {
     0x06, 
   };
 
+  hook_args crew_control_constructor_hook = {
+    CREW_CONTROL_CONSTRUCTOR,
+    crew_control_constructor_wrapper,
+    0x07,
+  };
+
   if (!install_hook(command_gui_hook, &trampoline_cursor)) {
     puts("[!] Couldn't install command gui hook");
+    return 1;
+  }
+
+  if (!install_hook(crew_control_constructor_hook, &trampoline_cursor)) {
+    puts("[!] Couldn't install crew control hook");
     return 1;
   }
 
