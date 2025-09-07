@@ -17,6 +17,7 @@
 const long unsigned int FTL_BASE_OFFSET = 0x400000; 
 const int SELF_PID = -1; // Use -1 to refer to the current process
 int * command_gui_addr = NULL;
+int * crew_control_addr = NULL;
 void * trampoline_cursor = NULL;
 static sw_server_t server;
 
@@ -159,7 +160,7 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
   overwrite_placeholder(hook.hook_func, 4, relay_buffer);
   printf("[+] Prepared relay buffer to hook function at %p\n", hook.hook_func);
 
-  void * target_loc = *trampoline_cursor - (memo[hook.target_memo_index].addr + JUMP_BUFFER_SIZE);
+  void * target_loc = (void *)((int *)*trampoline_cursor - ((int *)memo[hook.target_memo_index].addr + JUMP_BUFFER_SIZE));
   overwrite_jump_placeholder(target_loc, 1, jump_buffer);
 
   printf("[+] Overwriting target function at %p\n", memo[hook.target_memo_index].addr);
@@ -189,7 +190,7 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
   }
   puts("[+] Overwrote target function with jump to hook");
 
-  void * return_jump = (memo[hook.target_memo_index].addr + hook.prologue_size) - (*trampoline_cursor + JUMP_BUFFER_SIZE);
+  void * return_jump = (void *)((int *)(memo[hook.target_memo_index].addr + hook.prologue_size) - ((int *)*trampoline_cursor + JUMP_BUFFER_SIZE));
   char return_jump_buffer[JUMP_BUFFER_SIZE] = {
     0xE9,       // JMP opcode
     0x00, 0x00, 0x00, 0x00 // (4 bytes for relative address)
@@ -259,18 +260,21 @@ void sw_callback(
   *output_size  = input_size;
 }
 
-void command_gui_wrapper(int *this) {
+void command_gui_wrapper(int *addr) {
   puts("[+] Hooked CommandGui constructor!");
-  printf("[+] this pointer: %p\n", this);
-  command_gui_addr = this;
+  printf("[+] captured this pointer: %p\n", addr);
+  command_gui_addr = addr;
   if (sw_start(&server, 8080, sw_callback) != 0) {
     puts("[!] Could not start new socket server");
   }
   puts("[+] jumping back to original CommandGui constructor!");
 }
 
-void crew_control_constructor_wrapper(int *this) {
+void crew_control_constructor_wrapper(int *addr) {
   puts("[+] Hooked CrewControl constructor!");
+  printf("[+] captured addr pointer: %p\n", addr);
+  crew_control_addr = addr;
+  puts("[+] jumping back to original CrewControl constructor!");
 }
 
 int unprotect(mem * memory) {
@@ -288,7 +292,7 @@ __attribute__((constructor)) int hook() {
   
 
   // Allocate a page near the target memory
-  mem * mem_offsets = malloc(sizeof(mem));
+  mem * mem_offsets = (mem *)malloc(sizeof(mem));
   if (search_mem(SELF_PID, "FTL", mem_offsets) != 0) { return 1; }
 
   if (unprotect(mem_offsets) != 0) { return 1; }
@@ -326,13 +330,13 @@ __attribute__((constructor)) int hook() {
   // Install hooks
   hook_args command_gui_hook = {
     COMMAND_GUI_CONSTRUCTOR,
-    command_gui_wrapper,
+    (void *)command_gui_wrapper,
     0x06, 
   };
 
   hook_args crew_control_constructor_hook = {
     CREW_CONTROL_CONSTRUCTOR,
-    crew_control_constructor_wrapper,
+    (void *)crew_control_constructor_wrapper,
     0x07,
   };
 
