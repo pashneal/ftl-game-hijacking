@@ -11,9 +11,9 @@ MemoryOffsets::MemoryOffsets(std::string needle) {
   if (mapsFile == NULL) { return; }
 
   char memory_location[400];
-  long unsigned int *start_addr;
-  long unsigned int *end_addr;
-  long unsigned int *offset_addr;
+  long unsigned int start_addr;
+  long unsigned int end_addr;
+  long unsigned int offset_addr;
   char perms[5];
   char line[1000];
 
