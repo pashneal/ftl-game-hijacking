@@ -160,7 +160,7 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
   overwrite_placeholder(hook.hook_func, 4, relay_buffer);
   printf("[+] Prepared relay buffer to hook function at %p\n", hook.hook_func);
 
-  void * target_loc = (void *)((int *)*trampoline_cursor - ((int *)memo[hook.target_memo_index].addr + JUMP_BUFFER_SIZE));
+  void * target_loc = (void *)((char *)*trampoline_cursor - ((char *)memo[hook.target_memo_index].addr + JUMP_BUFFER_SIZE));
   overwrite_jump_placeholder(target_loc, 1, jump_buffer);
 
   printf("[+] Overwriting target function at %p\n", memo[hook.target_memo_index].addr);
@@ -190,7 +190,7 @@ bool install_hook(hook_args hook, void ** trampoline_cursor) {
   }
   puts("[+] Overwrote target function with jump to hook");
 
-  void * return_jump = (void *)((int *)(memo[hook.target_memo_index].addr + hook.prologue_size) - ((int *)*trampoline_cursor + JUMP_BUFFER_SIZE));
+  void * return_jump = (void *)((char *)(memo[hook.target_memo_index].addr + hook.prologue_size) - ((char *)*trampoline_cursor + JUMP_BUFFER_SIZE));
   char return_jump_buffer[JUMP_BUFFER_SIZE] = {
     0xE9,       // JMP opcode
     0x00, 0x00, 0x00, 0x00 // (4 bytes for relative address)
