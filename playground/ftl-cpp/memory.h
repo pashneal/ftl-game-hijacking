@@ -29,15 +29,26 @@ class MemoryOffsets {
     int unprotect();
 };
 
+struct entry {
+  char name[64]; // Null terminated name of the symbol 
+  void * addr;   // Address of the symbol in memory
+};
+    
 
 class Hook {
   public:
     int target_memo_index;
     uintptr_t * hook_func;
     int prologue_size;
+    static entry memo[100]; // Array to store the memoized entries
+    static char ** trampoline_cursor; // Pointer to the trampoline cursor
 
-    Hook(int target_memo_index, uintptr_t * hook_func, int prologue_size);
-    bool install(uintptr_t * trampoline_cursor);
+    Hook(int target_memo_index, uintptr_t * hook_func, int prologue_size){
+      this->target_memo_index = target_memo_index;
+      this->hook_func = hook_func;
+      this->prologue_size = prologue_size;
+    };
+    bool install();
 };
 
 int overwrite_addr(void * addr, void * data, int size);

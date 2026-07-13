@@ -4,6 +4,10 @@
 #include <ios>
 #include <ostream>
 
+
+entry Hook::memo[100];
+char** Hook::trampoline_cursor = nullptr;
+
 MemoryOffsets::MemoryOffsets(std::string needle) {
   std::string mapsPath = "/proc/self/maps";
   FILE* mapsFile = fopen(mapsPath.c_str(), "r");
@@ -75,14 +79,14 @@ int MemoryOffsets::unprotect() {
   return 0;
 }
 
-int overwrite_jump_placeholder(void * addr, int index, uint8_t * buffer) {
+void overwrite_jump_placeholder(void * addr, int index, uint8_t * buffer) {
   long unsigned int a = (long unsigned int)addr;
   for (int i = 0; i < 4; i++) {
     buffer[index + i] = (uint8_t)((a >> (i * 8)) & 0xFF); // Extract each byte
   }
 }
 
-int overwrite_placeholder(void * addr, int index, uint8_t * buffer) {
+void overwrite_placeholder(void * addr, int index, uint8_t * buffer) {
   long unsigned int a = (long unsigned int)addr;
   for (int i = 0; i < 8; i++) {
     buffer[index + i] = (uint8_t)((a >> (i * 8)) & 0xFF); // Extract each byte
@@ -99,7 +103,7 @@ int overwrite_addr(void * addr, void * data, int size) {
   return 0;
 }
 
-bool Hook::install(uintptr_t * trampoline_cursor) {
+bool Hook::install() {
   uint8_t jump_buffer[JUMP_BUFFER_SIZE] = {
     0xE9,       // JMP opcode
     0x00, 0x00, 0x00, 0x00 // (4 bytes for relative address)
@@ -118,7 +122,7 @@ bool Hook::install(uintptr_t * trampoline_cursor) {
   overwrite_placeholder(this->hook_func, 4, relay_buffer);
   printf("[+] Prepared relay buffer to hook function at %p\n", this->hook_func);
 
-  void * target_loc = (void *)((int *)*trampoline_cursor - ((int *)memo[this->target_memo_index].addr + JUMP_BUFFER_SIZE));
+  void * target_loc = (void *)((char *)*trampoline_cursor - ((char *)((uintptr_t)memo[this->target_memo_index].addr + JUMP_BUFFER_SIZE)));
   overwrite_jump_placeholder(target_loc, 1, jump_buffer);
 
   printf("[+] Overwriting target function at %p\n", memo[this->target_memo_index].addr);
@@ -133,6 +137,8 @@ bool Hook::install(uintptr_t * trampoline_cursor) {
 
 
   *trampoline_cursor += this->prologue_size;
+  puts("[+] Updated trampoline cursor after copying prologue");
+  printf("[+] New trampoline cursor at %p\n", *trampoline_cursor);
 
   if (!memcpy((void *)*trampoline_cursor, relay_buffer, RELAY_BUFFER_SIZE)) {
     puts("[!] Couldn't copy relay to trampoline");
@@ -148,7 +154,7 @@ bool Hook::install(uintptr_t * trampoline_cursor) {
   }
   puts("[+] Overwrote target function with jump to hook");
 
-  void * return_jump = (void *)((int *)(memo[this->target_memo_index].addr + this->prologue_size) - ((int *)*trampoline_cursor + JUMP_BUFFER_SIZE));
+  void * return_jump = (void *)((char *)((uintptr_t)memo[this->target_memo_index].addr + this->prologue_size) - ((char *)*trampoline_cursor + JUMP_BUFFER_SIZE));
   uint8_t return_jump_buffer[JUMP_BUFFER_SIZE] = {
     0xE9,       // JMP opcode
     0x00, 0x00, 0x00, 0x00 // (4 bytes for relative address)
@@ -164,3 +170,5 @@ bool Hook::install(uintptr_t * trampoline_cursor) {
   puts("[+] Copied return jump to trampoline");
   return true;
 }
+
+
