@@ -34,6 +34,10 @@ struct entry {
   void * addr;   // Address of the symbol in memory
 };
     
+class SharedMemory {
+  public:
+    static uintptr_t * crew_constructor;
+};
 
 class Hook {
   public:

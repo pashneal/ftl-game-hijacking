@@ -8,6 +8,8 @@
 entry Hook::memo[100];
 char** Hook::trampoline_cursor = nullptr;
 
+uintptr_t * SharedMemory::crew_constructor = nullptr;
+
 MemoryOffsets::MemoryOffsets(std::string needle) {
   std::string mapsPath = "/proc/self/maps";
   FILE* mapsFile = fopen(mapsPath.c_str(), "r");
@@ -38,6 +40,10 @@ MemoryOffsets::MemoryOffsets(std::string needle) {
           end = (uintptr_t)end_addr;
           offset = (uintptr_t)offset_addr;
           return;
+      } else {
+        std::cout << "Not found: " << memory_location << std::endl;
+        puts("line: ");
+        puts(line);
       }
   }
 
