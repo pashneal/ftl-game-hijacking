@@ -40,6 +40,15 @@ __attribute__((force_align_arg_pointer)) void intercept_mouse(uintptr_t * addr, 
     std::cout << "Crew member x " << position.x << std::endl; 
     std::cout << "Crew member y " << position.y << std::endl;
   }
+
+  std::cout << "my name: " << ship->ship.shipName << std::endl;
+  std::cout << "Size of Spreader<Fire>: " << sizeof(Spreader<Fire>) << std::endl;
+  std::cout << "Size of ShipObject: " << sizeof(ShipObject) << std::endl;
+
+  if (ship->current_target) {
+    std::string name = ship->current_target->ship.shipName;
+    std::cout << "current target name: " << name << std::endl;
+  }
 }
 
 

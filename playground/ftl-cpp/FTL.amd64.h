@@ -31,13 +31,12 @@ struct GL_Color
 struct __attribute__((aligned(8))) ShipObject
 {
   void ** vptr;
-  int iShipId;
-  //char pad0[4]; 
 };
 
 /* 1464 */
 struct __attribute__((aligned(8))) CrewTarget : ShipObject
 {
+  int iShipId;
 };
 
 /* 520 */
@@ -298,6 +297,7 @@ struct  ImageDesc
 
 struct  ExplosionAnimation : AnimationTracker, ShipObject
 {
+  int iShipId;
   std::vector<Animation> explosions;
   std::vector<GL_Texture*> pieces;
   std::vector<std::string> pieceNames;
@@ -331,6 +331,7 @@ struct  Globals::Ellipse
 /* 4293 */
 struct  Ship : ShipObject
 {
+  int iShipId;
   std::vector<Room*> vRoomList;
   std::vector<Door*> vDoorList;
   std::vector<OuterHull*> vOuterWalls;
@@ -486,11 +487,11 @@ struct  Collideable
 template<typename T>
 struct  Spreader : ShipObject
 {
+  int iShipId;
   int count;
   std::vector<int> roomCount;
   std::vector<std::vector<T>> grid;
 };
-
 
 /* 353 */
 struct ShipBlueprint_SystemTemplate
@@ -557,6 +558,7 @@ struct __attribute__((aligned(8))) Selectable
 /* 658 */
 struct Repairable : Selectable, ShipObject
 {
+  int iShipId;
   float fDamage;
   Point pLoc;
   float fMaxDamage;
@@ -587,6 +589,7 @@ struct __attribute__((aligned(8))) Fire : Spreadable
 /* 661 */
 struct  __attribute__((aligned(8))) ShipManager : ShipObject, Targetable, Collideable
 {
+  int iShipId;
   std::vector<ShipSystem*> vSystemList;
   OxygenSystem *oxygenSystem;
   TeleportSystem *teleportSystem;
